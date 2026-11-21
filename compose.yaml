@@ -1,0 +1,92 @@
+# PostgreSQL: Uses your existing DB_NAME, DB_USER, DB_PASSWORD, and DB_PORT variables.
+# Redis: Enables AOF persistence and stores its data in a named volume.
+# Localhost-only ports: Prevents these development services from being exposed on other network interfaces.
+# Health checks: Docker can report whether PostgreSQL and Redis are ready.
+# Restart policy: Containers restart automatically if they stop unexpectedly.
+# Private network: Containers share an isolated Docker network.
+
+
+
+#  Start the services
+# Make sure your project-root .env file contains the variables you shared, with a real local database password.
+
+# From the project root, run:
+# docker compose config
+
+
+# This checks the Compose configuration. Then start the services:
+# docker compose up -d
+
+
+# Check their status:
+# docker compose ps
+
+
+# You should see PostgreSQL and Redis running, with healthy status after their health checks complete.
+
+# Useful commands:
+# # View logs
+# docker compose logs -f
+
+# # Stop containers without deleting data
+# docker compose down
+
+# # Stop containers and delete volumes (DELETES DATABASE DATA)
+# docker compose down -v
+
+
+
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: dmroot-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${DB_NAME:-dmroot}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    networks:
+      - dmroot_network
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7
+    container_name: dmroot-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - dmroot_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  dmroot_network:
+    driver: bridge

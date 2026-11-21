@@ -1,0 +1,79 @@
+backend/
+│
+├── database/
+│   │
+│   ├── migrations/                 # Immutable migration history
+│   │   ├── 001_create_users.sql
+│   │   ├── 002_create_workspaces.sql
+│   │   ├── 003_create_user_indexes.sql
+│   │   ├── 004_create_user_functions.sql
+│   │   ├── 005_update_user_function.sql
+│   │   └── 006_create_user_views.sql
+│   │
+│   ├── tables/                     # Current database definitions
+│   │   │
+│   │   ├── users/
+│   │   │   ├── schema.sql
+│   │   │   ├── indexes.sql
+│   │   │   ├── constraints.sql
+│   │   │   ├── functions.sql
+│   │   │   ├── triggers.sql
+│   │   │   ├── views.sql
+│   │   │   ├── permissions.sql
+│   │   │   ├── policies.sql
+│   │   │   └── README.md
+│   │   │
+│   │   ├── workspaces/
+│   │   │   ├── schema.sql
+│   │   │   ├── indexes.sql
+│   │   │   ├── constraints.sql
+│   │   │   ├── functions.sql
+│   │   │   ├── triggers.sql
+│   │   │   ├── views.sql
+│   │   │   ├── permissions.sql
+│   │   │   ├── policies.sql
+│   │   │   └── README.md
+│   │   │
+│   │   └── automations/
+│   │       ├── schema.sql
+│   │       ├── indexes.sql
+│   │       ├── constraints.sql
+│   │       ├── functions.sql
+│   │       ├── triggers.sql
+│   │       ├── views.sql
+│   │       ├── permissions.sql
+│   │       ├── policies.sql
+│   │       └── README.md
+│   │
+│   ├── queries/                    # Runtime SQL queries
+│   │   ├── users/
+│   │   │   ├── create.sql
+│   │   │   ├── get_by_id.sql
+│   │   │   ├── get_by_email.sql
+│   │   │   ├── update.sql
+│   │   │   └── delete.sql
+│   │   │
+│   │   ├── workspaces/
+│   │   └── automations/
+│   │
+│   ├── shared/                    # Shared database objects
+│   │   ├── roles/
+│   │   ├── functions/
+│   │   └── extensions/
+│   │
+│   └── README.md
+│
+├── app/
+│   └── modules/
+│       ├── users/
+│       │   ├── router.py
+│       │   ├── service.py
+│       │   └── repository.py
+│       ├── workspaces/
+│       └── automations/
+│
+└── tests/
+    └── database/
+        ├── users/
+        ├── workspaces/
+        └── automations/
