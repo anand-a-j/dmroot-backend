@@ -72,3 +72,17 @@ class ExternalServiceException(AppException):
             code="EXTERNAL_SERVICE_ERROR",
             status_code=502,
         )
+
+
+class UnauthorizedException(AppException):
+    """401 - missing, invalid or expired credentials."""
+
+    def __init__(
+        self, message: str = "Authentication required", details: dict | None = None
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="UNAUTHORIZED",
+            status_code=401,
+            details=details,
+        )
