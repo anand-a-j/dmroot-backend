@@ -35,7 +35,7 @@ async def init_pool() -> None:
         dsn=settings.database_dsn,
         min_size=settings.db_pool_min_size,
         max_size=settings.db_pool_max_size,
-        command_timout=DEFAULT_REQUEST_TIMEOUT
+        command_timeout=DEFAULT_REQUEST_TIMEOUT,
     )
     logger.info("Database pool initialised")
 

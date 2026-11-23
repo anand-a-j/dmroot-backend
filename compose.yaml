@@ -49,10 +49,10 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
 
     ports:
-      - "127.0.0.1:${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-55432}:5432"
 
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
 
     networks:
       - dmroot_network
@@ -70,13 +70,18 @@ services:
     image: redis:7
     container_name: dmroot-redis
     restart: unless-stopped
+
     command: redis-server --appendonly yes
+
     ports:
       - "127.0.0.1:6379:6379"
+
     volumes:
       - redis_data:/data
+
     networks:
       - dmroot_network
+
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

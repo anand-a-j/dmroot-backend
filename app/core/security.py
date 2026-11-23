@@ -7,6 +7,7 @@ import hashlib
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from time import timezone
 from uuid import UUID
 
 import jwt
@@ -70,19 +71,12 @@ def validate_password_strength(password: str) -> str:
 ACCESS_TOKEN_TYPE = "access"
 
 
-@dataclass(frozen=True, slots=True)
-class AccessTokenPayload:
-    user_id: UUID
-    org_id: UUID | None
-
-
-
-def create_access_token(user_id: UUID, org_id: UUID | None) -> str:
-    """Claims: user id + active org only. Permissions are never put in the token."""
-    now = datetime.now(UTC)
+def create_access_token(user_id: UUID) -> str:
+    """Claims: user id only. Role and organization are read from the database
+    on every request, so changes take effect immediately."""
+    now = datetime.now(timezone.utc)
     claims = {
         "sub": str(user_id),
-        "org_id": str(org_id) if org_id else None,
         "type": ACCESS_TOKEN_TYPE,
         "iat": now,
         "exp": now + timedelta(minutes=settings.access_token_expire_minutes),
@@ -94,15 +88,13 @@ def create_access_token(user_id: UUID, org_id: UUID | None) -> str:
     )
 
 
-def decode_access_token(token: str) -> AccessTokenPayload:
-    """Validate signature, expiry and required claims; raise 401 on any problem."""
+def decode_access_token(token: str) -> UUID:
+    """Validate signature, expiry and claims; return the user id or raise 401."""
     try:
         claims = jwt.decode(
             token,
             settings.secret_key.get_secret_value(),
-            algorithms=[
-                settings.jwt_algorithm
-            ],  # fixed list, never trust the token's own header
+            algorithms=[settings.jwt_algorithm],
             options={"require": ["exp", "iat", "sub", "type"]},
         )
     except jwt.ExpiredSignatureError:
@@ -114,13 +106,9 @@ def decode_access_token(token: str) -> AccessTokenPayload:
         raise UnauthorizedException("Invalid access token")
 
     try:
-        user_id = UUID(claims["sub"])
-        raw_org = claims.get("org_id")
-        org_id = UUID(raw_org) if raw_org else None
+        return UUID(claims["sub"])
     except (ValueError, TypeError):
         raise UnauthorizedException("Invalid access token") from None
-
-    return AccessTokenPayload(user_id=user_id, org_id=org_id)
 
 
 
