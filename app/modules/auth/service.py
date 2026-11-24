@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 import asyncpg
 
 from app.core.config import settings
-from app.core.constants import ROLE_ADMIN
+from app.core.constants import ROLE_ADMIN, ROLE_PLATFORM_ADMIN
 from app.core.database import DBExecutor, get_pool, transaction
 from app.core.exceptions import (
     ConflictException,
@@ -40,12 +40,10 @@ async def _issue_tokens(
     user_agent: str | None,
     family_id: UUID | None = None,
 ) -> dict:
-    """Create an access token + a new refresh token row.
+    """Create an access token + a new refresh token row."""
 
-    A new login starts a new token "family" (= one device session).
-    Stage 4 passes the existing family_id when rotating.
-    """
     refresh_token = generate_refresh_token()
+
     await auth_repo.create_refresh_token(
         db,
         user_id=user_id,
@@ -54,6 +52,7 @@ async def _issue_tokens(
         expires_at=refresh_token_expiry(),
         user_agent=_class_user_agent(user_agent),
     )
+
     return {
         "access_token": create_access_token(user_id),
         "refresh_token": refresh_token,
@@ -93,7 +92,7 @@ async def register(payload: RegisterRequest, *, user_agent: str | None) -> AuthR
 
 async def login(payload: LoginRequest, *, user_agent: str | None) -> AuthResponse:
     db = get_pool()
-    user = await users_repo.get_by_email(db, payload)
+    user = await users_repo.get_by_email(db, payload.email)
 
     # Same error and similar timing for "unknown email" and "wrong password",
     # so attackers can't discover which emails are registered.
@@ -107,10 +106,12 @@ async def login(payload: LoginRequest, *, user_agent: str | None) -> AuthRespons
     if user["status"] != "active":
         raise ForbiddenException("This account is not active")
 
-    org_id = await orgs_repo.get_default_org_id(db, user["id"])
-    tokens = await _issue_tokens(
-        db, user_id=user["id"], org_id=org_id, user_agent=user_agent
-    )
+    if user["org_id"] is None:
+        raise ForbiddenException("User is not associated with an organization")
+
+    tokens = await _issue_tokens(db, user_id=user["id"], user_agent=user_agent)
 
     logger.info("User logged in user_id=%s", user["id"])
-    return AuthResponse(**tokens, user=UserResponse.model_validate(dict(user)), org_id=org_id)
+    return AuthResponse(
+        **tokens, user=UserResponse.model_validate(dict(user)), org_id=user["org_id"]
+    )

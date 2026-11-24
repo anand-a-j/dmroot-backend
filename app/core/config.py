@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # Auth / JWT (access tokens are signed with secret_key)
     jwt_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
-    access_token_expire_minties: int = 15
+    access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
 
 
@@ -69,8 +69,8 @@ class Settings(BaseSettings):
 
 
 @lru_cache
-def get_setings() -> Settings:
+def get_settings() -> Settings:
     return Settings()
 
 
-settings = get_setings()
+settings = get_settings()

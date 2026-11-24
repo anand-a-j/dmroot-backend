@@ -5,9 +5,7 @@ Security utilities: Argon2id passwords, JWT access tokens, opaque refresh tokens
 import asyncio
 import hashlib
 import secrets
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from time import timezone
 from uuid import UUID
 
 import jwt
@@ -65,22 +63,23 @@ def validate_password_strength(password: str) -> str:
     return password
 
 
-
 # Access tokens (JWT, short-lived)
 
 ACCESS_TOKEN_TYPE = "access"
 
 
 def create_access_token(user_id: UUID) -> str:
-    """Claims: user id only. Role and organization are read from the database
-    on every request, so changes take effect immediately."""
-    now = datetime.now(timezone.utc)
+    """Claims: user id only. Role and organization are read from the database."""
+
+    now = datetime.now(UTC)
+
     claims = {
         "sub": str(user_id),
         "type": ACCESS_TOKEN_TYPE,
         "iat": now,
         "exp": now + timedelta(minutes=settings.access_token_expire_minutes),
     }
+
     return jwt.encode(
         claims,
         settings.secret_key.get_secret_value(),
@@ -111,8 +110,8 @@ def decode_access_token(token: str) -> UUID:
         raise UnauthorizedException("Invalid access token") from None
 
 
-
 # Refresh tokens (opaque random strings, only the hash is stored in the DB)
+
 
 def generate_refresh_token() -> str:
     """Cryptographically secure random token (~64 chars). Sent to the client once."""
@@ -126,6 +125,4 @@ def hash_refresh_token(token: str) -> str:
 
 
 def refresh_token_expiry() -> datetime:
-    return datetime.now(UTC) + timedelta(
-        days=settings.refresh_token_expire_days
-    )
+    return datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days)
