@@ -1,7 +1,36 @@
 import json
 import logging
+import re
 import sys
 from datetime import UTC, datetime
+
+_SENSITIVE_PATTERN = re.compile(
+    r"""(?ix)
+    (["']?(?:access_token|client_secret|authorization|token)["']?)
+    (\s*[:=]\s*)                                                     
+    (?:Bearer\s+)?["']?[^\s"',;&}\]]+["']?                          
+    """
+)
+_BEARER_PATTERN = re.compile(r"(?i)Bearer\s+[A-Za-z0-9._~+/=-]+")
+
+
+def redact(text: str) -> str:
+    text = _SENSITIVE_PATTERN.sub(r"\1\2[REDACTED]", text)
+    return _BEARER_PATTERN.sub("Bearer [REDACTED]", text)
+
+
+class RedactingFilter(logging.Filter):
+    """Scrubs secrets from messages and tracebacks before any formatter sees them."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = redact(record.getMessage())
+        record.args = ()
+        if record.exc_info:
+            record.exc_text = redact(
+                logging.Formatter().formatException(record.exc_info)
+            )
+            record.exc_info = None
+        return True
 
 
 class JSONFormatter(logging.Formatter):
@@ -20,8 +49,14 @@ class JSONFormatter(logging.Formatter):
         if hasattr(record, "request_id"):
             log_data["request_id"] = record.request_id
 
-        if record.exc_info:
-            log_data["exception"] = self.formatException(record.exc_info)
+        exc = record.exc_text or (
+            self.formatException(record.exc_info) if record.exc_info else None
+        )
+        if exc:
+            log_data["exception"] = exc
+
+        if hasattr(record, "audit"):
+            log_data["audit"] = record.audit
 
         return json.dumps(log_data)
 
@@ -51,13 +86,6 @@ def setup_logging(environment: str = "development"):
     logging.getLogger("uvicorn.access").setLevel(logging.INFO)
     logging.getLogger("asyncpg").setLevel(logging.WARNING)
     logging.getLogger("redis").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
-
-# How to use log
-# import logging
-
-# logger = logging.getLogger(__name__)
-
-# logger.info("User registered")
-# logger.warning("Instagram token is expiring")
-# logger.error("Failed to process automation")

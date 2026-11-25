@@ -6,15 +6,17 @@ import asyncio
 import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from uuid import UUID
 
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 from app.core.config import settings
 from app.core.constants import PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH
-from app.core.exceptions import UnauthorizedException
+from app.core.exceptions import TokenEncryptionError, UnauthorizedException
 
 # ---------------------------------------------------------------------------
 # Passwords (Argon2id)
@@ -126,3 +128,35 @@ def hash_refresh_token(token: str) -> str:
 
 def refresh_token_expiry() -> datetime:
     return datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days)
+
+
+# Purpose: Securely encrypt Instagram/third-party access tokens before storing them in PostgreSQL and decrypt them when needed for API requests.
+# - _token_cipher() – Loads and caches encryption keys.
+# - encrypt_token() – Encrypts tokens before database storage.
+# - decrypt_token() – Decrypts stored tokens for API usage.
+# - reencrypt_token() – Re-encrypts existing tokens when rotating encryption keys.
+@lru_cache
+def _token_cipher() -> MultiFernet:
+    keys = settings.token_encryption_key_list
+    if not keys:
+        raise TokenEncryptionError("TOKEN_ENCRYPTION_KEYS is not configured")
+    return MultiFernet([Fernet(k) for k in keys])
+
+
+def encrypt_token(plaintext: str) -> str:
+    return _token_cipher().encrypt(plaintext.encode("utf-8")).decode("ascii")
+
+
+def decrypt_token(ciphertext: str) -> str:
+    try:
+        return _token_cipher().decrypt(ciphertext.encode("ascii")).decode("uft-8")
+    except InvalidToken:
+        raise TokenEncryptionError("Stored token could not be decrypted") from None
+
+
+def reencrypt_token(ciphertext: str) -> str:
+    """Re-encrypt with the primary key (run over rows after adding a new key)."""
+    try:
+        return _token_cipher().rotate(ciphertext.encode("ascii")).decode("ascii")
+    except InvalidToken:
+        raise TokenEncryptionError("Stored token could not be decrypted") from None

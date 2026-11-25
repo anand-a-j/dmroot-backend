@@ -3,10 +3,16 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import quote
 
-from pydantic import SecretStr, ValidationInfo, field_validator
+from cryptography.fernet import Fernet
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[2]
+
+
+# Token encryption: comma-separated Fernet keys. First key encrypts,
+# all keys decrypt (this is what makes rotation possible).
+token_encryption_keys: SecretStr | None = None
 
 
 class Settings(BaseSettings):
@@ -32,7 +38,6 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
 
-
     # PostgreSQL connection pool
     db_pool_min_size: int = 2
     db_pool_max_size: int = 10
@@ -57,7 +62,6 @@ class Settings(BaseSettings):
     meta_webhook_verify_token: SecretStr | None = None
     meta_api_version: str = "vXX.X"
 
-
     @property
     def database_dsn(self) -> str:
         user = quote(self.db_user, safe="")
@@ -66,6 +70,34 @@ class Settings(BaseSettings):
             f"postgresql://{user}:{password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
         )
+
+    @property
+    def token_encryption_key_list(self) -> list[str]:
+        if self.token_encryption_keys is None:
+            return []
+        raw = self.token_encryption_keys.get_secret_value()
+        return [k.strip() for k in raw.split(",") if k.strip()]
+
+    @model_validator(mode="after")
+    def _validate_token_encryption_keys(self) -> "Settings":
+        keys = self.token_encryption_key_list
+        if not keys:
+            if self.app_env != "development":
+                raise ValueError(
+                    "TOKEN_ENCRYPTION_KEYS must be set outside development"
+                )
+            return self
+        jwt_secret = self.secret_key.get_secret_value()
+        for key in keys:
+            if key == jwt_secret:
+                raise ValueError("TOKEN_ENCRYPTION_KEYS must not reuse SECRET_KEY")
+            try:
+                Fernet(key)
+            except (ValueError, TypeError):
+                raise ValueError(
+                    "TOKEN_ENCRYPTION_KEYS contains an invalid Fernet key"
+                ) from None
+        return self
 
 
 @lru_cache

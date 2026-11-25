@@ -86,3 +86,7 @@ class UnauthorizedException(AppException):
             status_code=401,
             details=details,
         )
+
+
+class TokenEncryptionError(Exception):
+    """Never includes token or ciphertext data."""
