@@ -6,11 +6,10 @@
 - Use `transaction()` in services when several writes must succeed together.
 """
 
-
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import TypeAlias
+from typing import TypeAlias, cast
 
 import asyncpg
 
@@ -30,7 +29,7 @@ async def init_pool() -> None:
     """Create the pool once at application startup."""
     global _pool
     if _pool is not None:
-        return 
+        return
     _pool = await asyncpg.create_pool(
         dsn=settings.database_dsn,
         min_size=settings.db_pool_min_size,
@@ -58,12 +57,7 @@ def get_pool() -> asyncpg.Pool:
 
 @asynccontextmanager
 async def transaction() -> AsyncGenerator[asyncpg.Connection, None]:
-    """Run several queries in ONE transaction (commit on success, rollback on error).
-
-    Usage:
-        async with transaction() as conn:
-            await users_repo.create(conn, ...)
-            await orgs_repo.create(conn, ...)
-    """
+    """Run several queries in ONE transaction (commit on success, rollback on error)."""
+# 799: Need to verify conn.transaction()
     async with get_pool().acquire() as conn, conn.transaction():
-        yield conn
+        yield cast(asyncpg.Connection, conn)

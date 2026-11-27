@@ -3,6 +3,7 @@ from uuid import UUID
 import asyncpg
 
 from app.core.database import DBExecutor
+from app.modules.users.schemas import UserResponse
 
 # Safe-to-expose columns (password_hash is added only where login needs it).
 # org_status lets callers block users whose organization is suspended/deleted.
@@ -45,15 +46,19 @@ async def create_user(
     full_name: str,
     email: str,
     password_hash: str,
-) -> asyncpg.Record:
-    # Raises asyncpg.UniqueViolationError if the email is already registered.
-    return await db.fetchrow(
+) -> UserResponse:
+    """Create a user and return the public user representation."""
+
+    row = await db.fetchrow(
         """
-        INSERT INTO users (id, org_id, role, full_name, email, password_hash,
-                           status, created_at, updated_at)
+        INSERT INTO users (
+            id, org_id, role, full_name, email, password_hash,
+            status, created_at, updated_at
+        )
         VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW(), NOW())
-        RETURNING id, full_name, email, password_hash, role, org_id, status,
-                  email_verified_at, created_at
+        RETURNING
+            id, full_name, email, role, org_id, status,
+            email_verified_at, created_at
         """,
         user_id,
         org_id,
@@ -62,3 +67,8 @@ async def create_user(
         email,
         password_hash,
     )
+
+    if row is None:
+        raise RuntimeError("Failed to create user")
+
+    return UserResponse.model_validate(dict(row))

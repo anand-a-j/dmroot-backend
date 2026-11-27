@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     db_user: str = "postgres"
     db_password: SecretStr
 
+    # Token encryption (Fernet)
+    # First key encrypts; all keys decrypt.
+    token_encryption_keys: SecretStr | None = None
+
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
@@ -102,7 +106,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return Settings()  # pyright: ignore[reportCallIssue]
 
 
 settings = get_settings()

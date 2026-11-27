@@ -1,13 +1,13 @@
-from fastapi import APIRouter, Depends, Request
+
+from fastapi import APIRouter, Request
 
 from app.core.responses import success_response
 from app.modules.auth import service
-from app.modules.auth.dependencies import get_current_active_user
+from app.modules.auth.dependencies import CurrentUserDep
 from app.modules.auth.schemas import LoginRequest, RegisterRequest
-from app.modules.users.schemas import CurrentUser, UserResponse
+from app.modules.users.schemas import UserResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
 
 @router.post("/register", status_code=201)
 async def register(payload: RegisterRequest, request: Request) -> dict:
@@ -28,7 +28,8 @@ async def login(payload: LoginRequest, request: Request) -> dict:
 
 
 @router.get("/me")
-async def me(user: CurrentUser = Depends(get_current_active_user)) -> dict:
-    # Re-validate as UserResponse so internal fields (org_status) are not returned
+async def me(user: CurrentUserDep) -> dict:
+
     data = UserResponse.model_validate(user.model_dump()).model_dump(mode="json")
+
     return success_response(data=data)

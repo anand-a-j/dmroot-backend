@@ -9,14 +9,13 @@ Rules:
 - f-strings only inject the constant _COLUMNS. All values are $n parameters.
 """
 
-import json
-from datetime import datetime
 from typing import Any
 from uuid import UUID
 
 from app.core.database import DBExecutor
-from app.core.enum.platform import Platform
 from app.core.mappers import record_to_dict
+from app.modules.connected_accounts.schema import ConnectedAccountResponse
+from app.modules.users.schemas import UserResponse
 
 Account = dict[str, Any]
 
@@ -27,40 +26,49 @@ _COLUMNS = """
 """
 
 
-async def list_by_org(
-    db: DBExecutor, org_id: UUID, platform: Platform | None = None
-) -> list[Account]:
-    rows = await db.fetch(
-        f"""
-        SELECT {_COLUMNS}
-        FROM connected_accounts
-        WHERE organization_id = $1
-          AND ($2::text IS NULL OR platform = $2::text)
-        ORDER BY created_at DESC
-        """,
-        org_id,
-        platform,
-    )
-    return [record_to_dict(r) for r in rows]
-
-
-async def lock_by_id(
+async def get_by_id(
     db: DBExecutor,
-    organization_id: UUID,
+    org_id: UUID,
     account_id: UUID,
-) -> Account | None:
-    """Like get_by_id but locks the row. Call inside a transaction."""
+) -> ConnectedAccountResponse | None:
     row = await db.fetchrow(
         f"""
         SELECT {_COLUMNS}
         FROM connected_accounts
-        WHERE id = $1 AND organization_id = $2
+        WHERE id = $1 AND org_id = $2
+        """,
+        account_id,
+        org_id,
+    )
+
+    if row is None:
+        return None
+
+    return ConnectedAccountResponse.model_validate(record_to_dict(row))
+
+
+async def lock_by_id(
+    db: DBExecutor,
+    org_id: UUID,
+    account_id: UUID,
+) -> ConnectedAccountResponse | None:
+    """Fetch and lock the account row inside a transaction."""
+
+    row = await db.fetchrow(
+        f"""
+        SELECT {_COLUMNS}
+        FROM connected_accounts
+        WHERE id = $1 AND org_id = $2
         FOR UPDATE
         """,
         account_id,
-        organization_id,
+        org_id,
     )
-    return record_to_dict(row)
+
+    if row is None:
+        return None
+
+    return ConnectedAccountResponse.model_validate(record_to_dict(row))
 
 
 async def lock_for_connect(
@@ -110,81 +118,41 @@ async def find_live_owner_org_id(
     )
 
 
-async def insert(
+async def create_user(
     db: DBExecutor,
     *,
-    account_id: UUID,
-    organization_id: UUID,
-    connected_by_user_id: UUID | None,
-    platform: str,
-    platform_account_id: str,
-    account_name: str | None,
-    username: str | None,
-    access_token_encrypted: str,
-    token_expires_at: datetime | None,
-    metadata: dict[str, Any],
-) -> Account:
+    user_id: UUID,
+    org_id: UUID | None,
+    role: str,
+    full_name: str,
+    email: str,
+    password_hash: str,
+) -> UserResponse:
+    """Create a user and return the public user representation."""
+
     row = await db.fetchrow(
-        f"""
-        INSERT INTO connected_accounts(
-        id, org_id, connected_by_user_id, platform,
-        platform_account_id, account_name, username,
-        access_token_encrypted, token_expires_at, status, metadata
+        """
+        INSERT INTO users (
+            id, org_id, role, full_name, email, password_hash,
+            status, created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active', $10::text::jsonb)
-        RETURNING {_COLUMNS}
-
+        VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW(), NOW())
+        RETURNING
+            id, full_name, email, role, org_id, status,
+            email_verified_at, created_at
         """,
-        account_id,
-        organization_id,
-        connected_by_user_id,
-        platform,
-        platform_account_id,
-        account_name,
-        username,
-        access_token_encrypted,
-        token_expires_at,
-        json.dumps(metadata),
-    )
-    return record_to_dict(row)
-
-
-async def reconnect(
-    db: DBExecutor,
-    *,
-    org_id: UUID,
-    account_id: UUID,
-    connected_by_user_id: UUID | None,
-    account_name: str | None,
-    username: str | None,
-    access_token_encrypted: str,
-    token_expires_at: datetime | None,
-    metadata: dict[str, Any],
-) -> Account | None:
-    row = await db.fetchrow(
-        f"""
-        UPDATE connected_accounts
-        SET connected_by_user_id = $3,
-            account_name = $4,
-            username = $5,
-            access_token_encrypted = $6,
-            token_expires_at = $7,
-            metadata = $8::text::jsonb,
-            status = 'active',
-            disconnecte_at = NULL
-        WHERE id = $1 AND org_id = $2
-        RETURNING {_COLUMNS}
-        """,
-        account_id,
+        user_id,
         org_id,
-        connected_by_user_id,
-        account_name,
-        username,
-        access_token_encrypted,
-        token_expires_at,
-        json.dumps(metadata),
+        role,
+        full_name,
+        email,
+        password_hash,
     )
-    return record_to_dict(row)
+
+    if row is None:
+        raise RuntimeError("Failed to create user")
+
+    return UserResponse.model_validate(dict(row))
 
 
 async def mark_expired(
@@ -210,8 +178,9 @@ async def mark_disconnected(
     db: DBExecutor,
     org_id: UUID,
     account_id: UUID,
-) -> Account | None:
-    """Keep the row, drop the token. Returns None if already disconnected."""
+) -> ConnectedAccountResponse | None:
+    """Disconnect account and return the updated account."""
+
     row = await db.fetchrow(
         f"""
         UPDATE connected_accounts
@@ -219,13 +188,19 @@ async def mark_disconnected(
             access_token_encrypted = NULL,
             token_expires_at = NULL,
             disconnected_at = NOW()
-        WHERE id = $1 AND org_id = $2 AND status <> 'disconnected'
+        WHERE id = $1
+          AND org_id = $2
+          AND status <> 'disconnected'
         RETURNING {_COLUMNS}
         """,
         account_id,
         org_id,
     )
-    return record_to_dict(row)
+
+    if row is None:
+        return None
+
+    return ConnectedAccountResponse.model_validate(record_to_dict(row))
 
 
 async def get_encrypted_token(
@@ -245,5 +220,5 @@ async def get_encrypted_token(
         WHERE id = $1 AND org_id = $2 AND status = 'active'
         """,
         account_id,
-        org_id
+        org_id,
     )

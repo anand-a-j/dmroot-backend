@@ -11,7 +11,11 @@ from app.core.responses import error_response
 logger = logging.getLogger(__name__)
 
 
-async def app_exception_handler(request: Request, exc: AppException):
+async def app_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    assert isinstance(exc, AppException)
 
     return JSONResponse(
         status_code=exc.status_code,
@@ -26,8 +30,10 @@ async def app_exception_handler(request: Request, exc: AppException):
 
 async def http_exception_handler(
     request: Request,
-    exc: StarletteHTTPException,
-):
+    exc: Exception,
+) -> JSONResponse:
+    assert isinstance(exc, StarletteHTTPException)
+
     return JSONResponse(
         status_code=exc.status_code,
         content=error_response(
@@ -41,8 +47,10 @@ async def http_exception_handler(
 
 async def validation_exception_handler(
     request: Request,
-    exc: RequestValidationError,
-):
+    exc: Exception,
+) -> JSONResponse:
+    assert isinstance(exc, RequestValidationError)
+
     # Exclude submitted input values to avoid leaking sensitive data.
     details = [
         {

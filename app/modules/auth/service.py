@@ -4,8 +4,8 @@ from uuid import UUID, uuid4
 import asyncpg
 
 from app.core.config import settings
-from app.core.constants import ROLE_ADMIN, ROLE_PLATFORM_ADMIN
 from app.core.database import DBExecutor, get_pool, transaction
+from app.core.enum.user_role import UserRole
 from app.core.exceptions import (
     ConflictException,
     ForbiddenException,
@@ -78,16 +78,14 @@ async def register(payload: RegisterRequest, *, user_agent: str | None) -> AuthR
                 email=payload.email,
                 password_hash=password_hash,
                 org_id=org_id,
-                role=ROLE_ADMIN,
+                role=UserRole.ADMIN.value,
             )
             tokens = await _issue_tokens(conn, user_id=user_id, user_agent=user_agent)
     except asyncpg.UniqueViolationError:
         # The unique index decides, so two simultaneous signups can't both win.
         raise ConflictException("An account with this email already exists") from None
     logger.info("User registered user_id=%s org_id=%s", user_id, org_id)
-    return AuthResponse(
-        **tokens, user=UserResponse.model_validate(dict(user)), org_id=org_id
-    )
+    return AuthResponse(**tokens, user=UserResponse.model_validate(dict(user)))
 
 
 async def login(payload: LoginRequest, *, user_agent: str | None) -> AuthResponse:
@@ -112,6 +110,4 @@ async def login(payload: LoginRequest, *, user_agent: str | None) -> AuthRespons
     tokens = await _issue_tokens(db, user_id=user["id"], user_agent=user_agent)
 
     logger.info("User logged in user_id=%s", user["id"])
-    return AuthResponse(
-        **tokens, user=UserResponse.model_validate(dict(user)), org_id=user["org_id"]
-    )
+    return AuthResponse(**tokens, user=UserResponse.model_validate(dict(user)))
