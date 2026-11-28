@@ -1,0 +1,29 @@
+# Purpose: 
+Why does this file exist? What responsibility does it have?
+
+# Flow: 
+Who calls this code, and what happens after it?
+
+# Dependencies: 
+Why are these imports needed?
+
+# Data: 
+What enters, what changes, and what comes out?
+
+# Database: 
+Are queries parameterized? Are transactions needed?
+
+# Security: 
+Authentication, authorization, tenant isolation, input validation, secrets?
+
+# Errors: 
+What can fail? How is failure handled?
+
+# Async: 
+Why async/await? Could blocking operations occur?
+
+# Reliability: 
+Retries, duplicate requests, race conditions, timeouts?
+
+# Testing: 
+How would I prove this works, including edge cases?
